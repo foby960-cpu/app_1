@@ -1,6 +1,9 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// 📁 SAVE TO: routes/bookingRoutes.js
+// ─────────────────────────────────────────────────────────────────────────────
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/authMiddleware'); // your JWT middleware
+const auth = require('../middleware/authMiddleware');
 const {
     getCenters,
     createBooking,
@@ -10,12 +13,12 @@ const {
     completeBooking,
 } = require('../controllers/bookingController');
 
-// ── Public ────────────────────────────────────────────────────
+// ── Public ────────────────────────────────────────────────────────────────────
 // GET /api/bookings/centers?waste_type=Plastic
 router.get('/centers', getCenters);
 
-// ── Protected (requires JWT) ──────────────────────────────────
-// GET  /api/bookings/mine?status=pending
+// ── Protected (requires JWT) ──────────────────────────────────────────────────
+// GET  /api/bookings/mine?status=pending&page=1
 router.get('/mine', auth, getMyBookings);
 
 // GET  /api/bookings/:id

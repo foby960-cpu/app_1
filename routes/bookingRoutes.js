@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth'); // your JWT middleware
+const auth = require('../middleware/authMiddleware'); // your JWT middleware
 const {
     getCenters,
     createBooking,

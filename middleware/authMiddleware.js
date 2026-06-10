@@ -1,26 +1,17 @@
 const jwt = require('jsonwebtoken');
 
-// ── Middleware: verify Bearer JWT token ───────────────────────────────────────
-const verifyToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-
-  // Expect header: "Authorization: Bearer <token>"
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Access token required' });
-  }
-
-  const token = authHeader.split(' ')[1];
-
+const auth = async (req, res, next) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // { id, email, username, iat, exp }
-    next();
-  } catch (err) {
-    if (err.name === 'TokenExpiredError') {
-      return res.status(403).json({ message: 'Token has expired, please log in again' });
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({ success: false, message: "No token, authorization denied" });
     }
-    return res.status(403).json({ message: 'Invalid token' });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    req.user = decoded;
+    next();
+  } catch (error) {
+    res.status(401).json({ success: false, message: "Token is not valid" });
   }
 };
 
-module.exports = { verifyToken };
+module.exports = auth;

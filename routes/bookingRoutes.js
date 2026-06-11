@@ -1,14 +1,33 @@
-﻿const express = require('express');
+const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/authMiddleware');
-const bookingController = require('../controllers/bookingController');
+const auth = require('../middleware/auth'); // your JWT middleware
+const {
+    getCenters,
+    createBooking,
+    getMyBookings,
+    getBookingById,
+    cancelBooking,
+    completeBooking,
+} = require('../controllers/bookingController');
 
-// Using explicit object reference to guarantee Express reads them as callback functions
-router.get('/centers', auth, bookingController.getCenters);
-router.post('/', auth, bookingController.createBooking);
-router.get('/mine', auth, bookingController.getMyBookings);
-router.get('/:id', auth, bookingController.getBookingById);
-router.delete('/:id', auth, bookingController.cancelBooking);
-router.put('/:id/complete', auth, bookingController.completeBooking);
+// ── Public ────────────────────────────────────────────────────
+// GET /api/bookings/centers?waste_type=Plastic
+router.get('/centers', getCenters);
+
+// ── Protected (requires JWT) ──────────────────────────────────
+// GET  /api/bookings/mine?status=pending
+router.get('/mine', auth, getMyBookings);
+
+// GET  /api/bookings/:id
+router.get('/:id', auth, getBookingById);
+
+// POST /api/bookings
+router.post('/', auth, createBooking);
+
+// DELETE /api/bookings/:id  (cancel)
+router.delete('/:id', auth, cancelBooking);
+
+// PUT /api/bookings/:id/complete
+router.put('/:id/complete', auth, completeBooking);
 
 module.exports = router;

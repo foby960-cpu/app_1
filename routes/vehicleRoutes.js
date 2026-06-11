@@ -1,10 +1,9 @@
 const express = require('express');
-const router = express.Router();
-const auth = require('../middleware/authMiddleware');
-const vehicleController = require('../controllers/vehicleController');
+const router  = express.Router();
+const { getNearbyVehicles, updateLocation } = require('../controllers/vehicleController');
+const { verifyToken } = require('../middleware/authMiddleware');
 
-// Standardized mapping using explicit object properties
-router.post('/', auth, vehicleController.createVehicle || ((req, res) => res.status(501).json({ message: "Not Implemented" })));
-router.get('/', vehicleController.getAllVehicles);
+router.get('/nearby',           verifyToken, getNearbyVehicles);
+router.put('/:id/location',     verifyToken, updateLocation);
 
 module.exports = router;

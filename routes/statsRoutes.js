@@ -1,9 +1,9 @@
 const express = require('express');
-const router = express.Router();
-const auth = require('../middleware/authMiddleware');
-const statsController = require('../controllers/statsController');
+const router  = express.Router();
+const { getMyStats, getLeaderboard } = require('../controllers/statsController');
+const { verifyToken } = require('../middleware/authMiddleware');
 
-// Clean, explicit reference mapping to protect against [object Undefined]
-router.get('/', auth, statsController.getDashboardStats || ((req, res) => res.status(501).json({ message: "Not Implemented" })));
+router.get('/me',          verifyToken, getMyStats);
+router.get('/leaderboard', verifyToken, getLeaderboard);
 
 module.exports = router;

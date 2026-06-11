@@ -1,16 +1,13 @@
-const express = require('express');
-const router = express.Router();
-const auth = require('../middleware/authMiddleware');
-const authController = require('../controllers/authController');
+// ── routes/authRoutes.js ──────────────────────────────────────
+const express  = require('express');
+const router   = express.Router();
+const { register, login, sendOtp, verifyOtp, getProfile } = require('../controllers/authController');
+const { verifyToken } = require('../middleware/authMiddleware');
 
-// Clean mapping using clear object reference syntax
-router.post('/register', authController.register);
-router.post('/login', authController.login);
-router.post('/send-otp', authController.sendOtp);
-router.post('/verify-otp', authController.verifyOtp);
-router.post('/resend-otp', authController.resendOtp);
-router.get('/profile', auth, authController.getProfile);
-router.put('/profile/phone', auth, authController.updatePhoneNumber);
-router.post('/logout', auth, authController.logout);
+router.post('/register',    register);
+router.post('/login',       login);
+router.post('/send-otp',    sendOtp);
+router.post('/verify-otp',  verifyOtp);
+router.get('/profile',      verifyToken, getProfile);
 
 module.exports = router;

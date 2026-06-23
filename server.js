@@ -1,8 +1,11 @@
 'use strict';
 
 // -----------------------------------------------------------------------------
-// EcoWaste API v2.0.0
+// AcoWaste API v2.1.0
 //    Entry point for Render deployment
+//    Rewritten to match the live schema: users / scans / pickup_requests
+//    (previously this file targeted username/full_name/waste_logs/bookings —
+//     those columns and tables no longer exist and have been removed below)
 // -----------------------------------------------------------------------------
 
 // -- Force IPv4 DNS BEFORE anything else --------------------------------------
@@ -116,9 +119,9 @@ function _normalizePhone(phone) {
 async function sendSMS(phone, message) {
   const to = _normalizePhone(phone);
   const token = process.env.MAMBO_TOKEN || process.env.MAMBOSMS_TOKEN;
-  const senderId = process.env.MAMBO_SENDER_ID || process.env.MAMBOSMS_SENDER || 'EcoWaste';
+  const senderId = process.env.MAMBO_SENDER_ID || process.env.MAMBOSMS_SENDER || 'AcoWaste';
   const baseUrl = process.env.MAMBO_BASE_URL || 'https://mambosms.co.tz/api/v1/sms/single';
-  const finalizedText = message || 'Kodi yako ya uhakiki ya EcoWaste ni 1234';
+  const finalizedText = message || 'Kodi yako ya uhakiki ya AcoWaste ni 1234';
 
   if (!to || to.length !== 12 || !to.startsWith('255')) {
     console.error(`[SMS] Invalid Tanzania phone number format: ${phone}`);
@@ -157,22 +160,22 @@ async function sendSMS(phone, message) {
 
 async function sendOtpSMS(phone, otp, name) {
   const msg =
-    `Dear ${name || 'Customer'}, your EcoWaste verification code is: ${otp}. ` +
+    `Dear ${name || 'Customer'}, your AcoWaste verification code is: ${otp}. ` +
     `Valid for 10 minutes. Do not share this code.`;
   return sendSMS(phone, msg);
 }
 
 async function sendWelcomeSMS(phone, name) {
   const msg =
-    `Karibu EcoWaste, ${name}! Akaunti yako imefanikiwa kusajiliwa. ` +
-    `Sasa unaweza kurekodi taka na kupata pointi za mazingira.`;
+    `Karibu AcoWaste, ${name}! Akaunti yako imefanikiwa kusajiliwa. ` +
+    `Sasa unaweza kurekodi taka na kuomba kuokotwa.`;
   return sendSMS(phone, msg);
 }
 
 // -----------------------------------------------------------------------------
 // EMAIL SERVICE
 // -----------------------------------------------------------------------------
-const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || 'EcoWaste Support';
+const SMTP_FROM_NAME = process.env.SMTP_FROM_NAME || 'AcoWaste Support';
 const SMTP_FROM_ADDR = process.env.SMTP_FROM || process.env.SMTP_USER || 'support@simuvote.com';
 
 async function sendEmail(toEmail, subject, textOrHtml, isHtml = false) {
@@ -194,12 +197,12 @@ async function sendEmail(toEmail, subject, textOrHtml, isHtml = false) {
 }
 
 async function sendOtpEmail(toEmail, toName, otp) {
-  const subject = `EcoWaste - Nambari ya Uthibitisho (${otp})`;
+  const subject = `AcoWaste - Nambari ya Uthibitisho (${otp})`;
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;
                 padding:36px;background:#ffffff;border-radius:16px;
                 box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-      <h2 style="color:#1B5E20;margin-top:0;">EcoWaste - Uthibitisho</h2>
+      <h2 style="color:#1B5E20;margin-top:0;">AcoWaste - Uthibitisho</h2>
       <p style="font-size:15px;">Habari <strong>${toName || 'Mtumiaji'}</strong>,</p>
       <p style="font-size:15px;">Nambari yako ya uthibitisho ni:</p>
       <div style="background:#E8F5E9;border:2px dashed #2E7D32;border-radius:14px;
@@ -213,27 +216,26 @@ async function sendOtpEmail(toEmail, toName, otp) {
       </p>
       <hr style="border:none;border-top:1px solid #e8e8e8;margin:24px 0;">
       <p style="color:#aaa;font-size:11px;text-align:center;">
-        (c) ${new Date().getFullYear()} EcoWaste. Ujumbe huu umetumwa kiotomatiki.
+        (c) ${new Date().getFullYear()} AcoWaste. Ujumbe huu umetumwa kiotomatiki.
       </p>
     </div>`;
   return sendEmail(toEmail, subject, html, true);
 }
 
 async function sendWelcomeEmail(toEmail, toName) {
-  const subject = `Karibu EcoWaste, ${toName}!`;
+  const subject = `Karibu AcoWaste, ${toName}!`;
   const html = `
     <div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;
                 padding:36px;background:#ffffff;border-radius:16px;">
-      <h2 style="color:#1B5E20;">Karibu EcoWaste!</h2>
+      <h2 style="color:#1B5E20;">Karibu AcoWaste!</h2>
       <p>Habari <strong>${toName}</strong>,</p>
       <p>Akaunti yako imefanikiwa kusajiliwa. Sasa unaweza:</p>
       <ul style="color:#333;line-height:1.8;">
-        <li>Kurekodi taka na kupata <strong>Eco Points</strong></li>
-        <li>Kupata taksi ya taka karibu nawe</li>
-        <li>Kuona historia ya matumizi yako</li>
-        <li>Kushiriki kwenye leaderboard ya jamii</li>
+        <li>Kurekodi/kuchanganua taka (scan)</li>
+        <li>Kuomba mkusanyaji wa taka karibu nawe</li>
+        <li>Kuona historia ya maombi yako</li>
       </ul>
-      <p style="color:#aaa;font-size:11px;">(c) ${new Date().getFullYear()} EcoWaste</p>
+      <p style="color:#aaa;font-size:11px;">(c) ${new Date().getFullYear()} AcoWaste</p>
     </div>`;
   return sendEmail(toEmail, subject, html, true);
 }
@@ -330,8 +332,8 @@ if (process.env.NODE_ENV === 'development') {
 app.get('/', (_req, res) => {
   res.json({
     success: true,
-    message: 'EcoWaste API is running',
-    version: '2.0.0',
+    message: 'AcoWaste API is running',
+    version: '2.1.0',
     environment: process.env.NODE_ENV || 'development',
     timestamp: new Date().toISOString(),
   });
@@ -342,6 +344,9 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok', env: process.env.
 
 // -----------------------------------------------------------------------------
 // AUTH ROUTES
+// users table: id, name, email, password_hash, role, phone, vehicle_reg,
+//              status, latitude, longitude, location_detail, last_seen,
+//              created_at, updated_at
 // -----------------------------------------------------------------------------
 
 app.post('/api/auth/send-otp', authLimiter, async (req, res) => {
@@ -369,7 +374,6 @@ app.post('/api/auth/send-otp', authLimiter, async (req, res) => {
   const anyOk = results.sms?.success || results.email?.success;
   const isDebug = process.env.NODE_ENV !== 'production';
 
-  // Always return 200 so the client can see the full delivery report
   return res.status(200).json({
     success: anyOk,
     message: anyOk ? 'OTP imetumwa' : 'Imeshindwa kutuma OTP',
@@ -396,45 +400,52 @@ app.post('/api/auth/verify-otp', authLimiter, (req, res) => {
   });
 });
 
+// Matches register_screen.dart -> ApiService.register(name, email, password,
+// role, phone, vehicleReg). JSON body uses snake_case: vehicle_reg.
 app.post('/api/auth/register', authLimiter, async (req, res) => {
   const {
-    full_name, username, phone, email,
-    password, role = 'user',
-    driver_license, vehicle_type,
+    name, email, password,
+    role = 'user',
+    phone, vehicle_reg,
   } = req.body;
 
-  if (!full_name || !username || !password) {
-    return res.status(400).json({ success: false, message: 'Jina, username, na password zinahitajika' });
+  if (!name || !email || !password) {
+    return res.status(400).json({ success: false, message: 'Jina, email, na password zinahitajika' });
+  }
+
+  const allowedRoles = ['user', 'collector', 'coordinator'];
+  if (!allowedRoles.includes(role)) {
+    return res.status(400).json({ success: false, message: 'Role si sahihi' });
+  }
+
+  if (role === 'collector' && !vehicle_reg) {
+    return res.status(400).json({ success: false, message: 'Namba ya gari inahitajika kwa collector' });
   }
 
   try {
-    const dup = await pool.query(
-      'SELECT id FROM users WHERE username=$1 OR phone=$2',
-      [username, phone || null]
-    );
+    const dup = await pool.query('SELECT id FROM users WHERE email=$1', [email]);
     if (dup.rows.length > 0) {
-      return res.status(409).json({ success: false, message: 'Username au namba ya simu tayari imetumika' });
+      return res.status(409).json({ success: false, message: 'Email tayari imetumika' });
     }
 
     const hash = await bcrypt.hash(password, 12);
     const result = await pool.query(
       `INSERT INTO users
-         (full_name, username, phone, email, password_hash,
-          role, driver_license, vehicle_type, eco_points, total_kg)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,0)
-       RETURNING id, full_name, username, phone, email, role, eco_points`,
-      [full_name, username, phone || null, email || null,
-        hash, role, driver_license || null, vehicle_type || null]
+         (name, email, password_hash, role, phone, vehicle_reg, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING id, name, email, role, phone, vehicle_reg, status, created_at`,
+      [name, email, hash, role, phone || null, vehicle_reg || null,
+       role === 'collector' ? 'offline' : null]
     );
 
     const user = result.rows[0];
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
+      { id: user.id, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
 
-    sendNotification({ phone, email, name: full_name, type: 'welcome' }).catch(() => { });
+    sendNotification({ phone, email, name, type: 'welcome' }).catch(() => {});
 
     return res.status(201).json({
       success: true,
@@ -448,25 +459,16 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
   }
 });
 
+// Matches login_screen.dart -> ApiService.login(email, password) -> user['role']
 app.post('/api/auth/login', authLimiter, async (req, res) => {
-  const { email, phone, username, driver_id, password } = req.body;
+  const { email, password } = req.body;
 
-  if (!password) {
-    return res.status(400).json({ success: false, message: 'Password inahitajika' });
+  if (!email || !password) {
+    return res.status(400).json({ success: false, message: 'Email na password zinahitajika' });
   }
 
   try {
-    const identifier = email || phone || username || driver_id;
-    if (!identifier) {
-      return res.status(400).json({ success: false, message: 'Weka email, simu, au username' });
-    }
-
-    const result = await pool.query(
-      `SELECT * FROM users
-       WHERE email=$1 OR phone=$1 OR username=$1 OR driver_license=$1
-       LIMIT 1`,
-      [identifier]
-    );
+    const result = await pool.query('SELECT * FROM users WHERE email=$1 LIMIT 1', [email]);
 
     if (result.rows.length === 0) {
       return res.status(401).json({ success: false, message: 'Akaunti haikupatikana' });
@@ -479,7 +481,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
+      { id: user.id, email: user.email, role: user.role },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
@@ -495,8 +497,8 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 app.get('/api/auth/profile', authMiddleware, async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT id, full_name, username, phone, email, role,
-              eco_points, total_kg, driver_license, vehicle_type
+      `SELECT id, name, email, role, phone, vehicle_reg, status,
+              latitude, longitude, location_detail, last_seen, created_at
        FROM users WHERE id=$1`,
       [req.user.id]
     );
@@ -508,67 +510,54 @@ app.get('/api/auth/profile', authMiddleware, async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// WASTE ROUTES
+// SCAN ROUTES  (replaces the old /api/waste/* routes -> waste_logs table)
+// scans table: id, user_id, label, description, material_input,
+//              weight_min_kg, weight_max_kg, weight_category,
+//              fee_min_tzs, fee_max_tzs, latitude, longitude, created_at
 // -----------------------------------------------------------------------------
 
-app.post('/api/waste/log', authMiddleware, async (req, res) => {
+app.post('/api/scans', authMiddleware, async (req, res) => {
   const {
-    waste_type, container_count = 1, weight_kg,
-    photo_url, ai_confidence, ai_detected_type,
-    latitude, longitude, notes,
+    label, description, material_input,
+    weight_min_kg, weight_max_kg, weight_category,
+    fee_min_tzs, fee_max_tzs,
+    latitude, longitude,
   } = req.body;
 
-  if (!waste_type) {
-    return res.status(400).json({ success: false, message: 'waste_type inahitajika' });
-  }
-
   try {
-    const eco_points = Math.round((weight_kg || 1) * 10);
     const r = await pool.query(
-      `INSERT INTO waste_logs
-         (user_id, waste_type, container_count, weight_kg,
-          photo_url, ai_confidence, ai_detected_type,
-          latitude, longitude, notes, eco_points)
+      `INSERT INTO scans
+         (user_id, label, description, material_input,
+          weight_min_kg, weight_max_kg, weight_category,
+          fee_min_tzs, fee_max_tzs, latitude, longitude)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING *`,
-      [req.user.id, waste_type, container_count, weight_kg || null,
-      photo_url || null, ai_confidence || null, ai_detected_type || null,
-      latitude || null, longitude || null, notes || null, eco_points]
+      [req.user.id, label || null, description || null, material_input || null,
+       weight_min_kg || null, weight_max_kg || null, weight_category || null,
+       fee_min_tzs || null, fee_max_tzs || null, latitude || null, longitude || null]
     );
-    await pool.query(
-      `UPDATE users SET
-         eco_points = eco_points + $1,
-         total_kg   = total_kg   + $2
-       WHERE id=$3`,
-      [eco_points, weight_kg || 0, req.user.id]
-    );
-    return res.status(201).json({
-      success: true,
-      message: 'Rekodi imehifadhiwa',
-      log: r.rows[0],
-      eco_points,
-    });
+    return res.status(201).json({ success: true, message: 'Scan imehifadhiwa', scan: r.rows[0] });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 });
 
-app.get('/api/waste/my-logs', authMiddleware, async (req, res) => {
+app.get('/api/scans/mine', authMiddleware, async (req, res) => {
   try {
     const r = await pool.query(
-      'SELECT * FROM waste_logs WHERE user_id=$1 ORDER BY created_at DESC',
+      'SELECT * FROM scans WHERE user_id=$1 ORDER BY created_at DESC',
       [req.user.id]
     );
-    return res.json({ success: true, logs: r.rows });
+    return res.json({ success: true, scans: r.rows });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 });
 
-app.delete('/api/waste/log/:id', authMiddleware, async (req, res) => {
+app.delete('/api/scans/:id', authMiddleware, async (req, res) => {
   try {
     await pool.query(
-      'DELETE FROM waste_logs WHERE id=$1 AND user_id=$2',
+      'DELETE FROM scans WHERE id=$1 AND user_id=$2',
       [req.params.id, req.user.id]
     );
     return res.json({ success: true, message: 'Imefutwa' });
@@ -577,44 +566,27 @@ app.delete('/api/waste/log/:id', authMiddleware, async (req, res) => {
   }
 });
 
-app.post('/api/waste/verify-ai', authMiddleware, aiLimiter, async (req, res) => {
+// AI detection placeholder — same behavior as before, kept under /api/scans
+app.post('/api/scans/verify-ai', authMiddleware, aiLimiter, async (req, res) => {
   return res.json({
     success: true,
-    detected_type: req.body.waste_type || 'unknown',
+    detected_type: req.body.material_input || 'unknown',
     confidence: 0.95,
     message: 'AI verification placeholder - implement your model here',
   });
 });
 
 // -----------------------------------------------------------------------------
-// MAP ROUTES
+// COLLECTOR ROUTES
+// Uses users.status / users.latitude / users.longitude (no is_online column)
 // -----------------------------------------------------------------------------
 
-app.get('/api/map/collection-points', async (req, res) => {
+app.get('/api/collectors/nearby', async (req, res) => {
   try {
     const r = await pool.query(
-      `SELECT id, name, latitude, longitude, address, is_active
-       FROM collection_points
-       WHERE is_active = true
-       ORDER BY name`
-    ).catch(() => ({ rows: [] }));
-    return res.json({ success: true, points: r.rows });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// -----------------------------------------------------------------------------
-// VEHICLE / COLLECTOR ROUTES
-// -----------------------------------------------------------------------------
-
-app.get(['/api/vehicles/nearby', '/api/collectors/nearby'], async (req, res) => {
-  try {
-    const r = await pool.query(
-      `SELECT id, full_name, username, phone, vehicle_type,
-              driver_license, latitude, longitude, is_online, eco_points
+      `SELECT id, name, phone, vehicle_reg, status, latitude, longitude, location_detail
        FROM users
-       WHERE role='collector' AND is_online=true
+       WHERE role='collector' AND status='online'
        LIMIT 20`
     );
     return res.json({ success: true, collectors: r.rows });
@@ -624,11 +596,21 @@ app.get(['/api/vehicles/nearby', '/api/collectors/nearby'], async (req, res) => 
 });
 
 app.put('/api/collectors/location', authMiddleware, async (req, res) => {
-  const { latitude, longitude, is_online } = req.body;
+  const { latitude, longitude, status, location_detail } = req.body;
+  const allowedStatus = ['online', 'idle', 'offline'];
+
   try {
     await pool.query(
-      'UPDATE users SET latitude=$1, longitude=$2, is_online=$3 WHERE id=$4',
-      [latitude, longitude, is_online ?? true, req.user.id]
+      `UPDATE users SET
+         latitude = $1,
+         longitude = $2,
+         status = $3,
+         location_detail = COALESCE($4, location_detail),
+         last_seen = now()
+       WHERE id = $5`,
+      [latitude ?? null, longitude ?? null,
+       allowedStatus.includes(status) ? status : 'online',
+       location_detail || null, req.user.id]
     );
     return res.json({ success: true, message: 'Location updated' });
   } catch (err) {
@@ -637,139 +619,134 @@ app.put('/api/collectors/location', authMiddleware, async (req, res) => {
 });
 
 // -----------------------------------------------------------------------------
-// STATS ROUTES
+// PICKUP REQUEST ROUTES  (replaces the old /api/bookings/* routes)
+// pickup_requests table: id, requester_id, collector_id, scan_id, status,
+//                        created_at, updated_at
 // -----------------------------------------------------------------------------
 
-app.get('/api/stats/me', authMiddleware, async (req, res) => {
+// Create a pickup request from a scan (requester = logged-in user)
+app.post('/api/pickup-requests', authMiddleware, async (req, res) => {
+  const { scan_id } = req.body;
+  if (!scan_id) {
+    return res.status(400).json({ success: false, message: 'scan_id inahitajika' });
+  }
   try {
-    const u = await pool.query(
-      'SELECT eco_points, total_kg FROM users WHERE id=$1',
+    const r = await pool.query(
+      `INSERT INTO pickup_requests (requester_id, scan_id, status)
+       VALUES ($1,$2,'pending') RETURNING *`,
+      [req.user.id, scan_id]
+    );
+    return res.status(201).json({ success: true, request: r.rows[0] });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Requests made by the logged-in user
+app.get('/api/pickup-requests/mine', authMiddleware, async (req, res) => {
+  try {
+    const r = await pool.query(
+      'SELECT * FROM pickup_requests WHERE requester_id=$1 ORDER BY created_at DESC',
       [req.user.id]
     );
-    const logs = await pool.query(
-      'SELECT waste_type, COUNT(*) as count FROM waste_logs WHERE user_id=$1 GROUP BY waste_type',
-      [req.user.id]
+    return res.json({ success: true, requests: r.rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// All pending requests, for coordinators/collectors to act on
+app.get('/api/pickup-requests/pending', authMiddleware, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT pr.*, s.label, s.weight_min_kg, s.weight_max_kg, s.fee_min_tzs, s.fee_max_tzs,
+              u.name AS requester_name, u.phone AS requester_phone
+       FROM pickup_requests pr
+       JOIN scans s ON s.id = pr.scan_id
+       JOIN users u ON u.id = pr.requester_id
+       WHERE pr.status = 'pending'
+       ORDER BY pr.created_at ASC`
+    );
+    return res.json({ success: true, requests: r.rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Collector accepts a pending request
+app.put('/api/pickup-requests/:id/accept', authMiddleware, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `UPDATE pickup_requests
+       SET collector_id=$1, status='accepted'
+       WHERE id=$2 AND status='pending'
+       RETURNING *`,
+      [req.user.id, req.params.id]
+    );
+    if (!r.rows[0]) return res.status(409).json({ success: false, message: 'Request haipo au tayari imeshughulikiwa' });
+    return res.json({ success: true, request: r.rows[0] });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/pickup-requests/:id/complete', authMiddleware, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `UPDATE pickup_requests SET status='completed'
+       WHERE id=$1 AND collector_id=$2 RETURNING *`,
+      [req.params.id, req.user.id]
+    );
+    if (!r.rows[0]) return res.status(404).json({ success: false, message: 'Request not found' });
+    return res.json({ success: true, request: r.rows[0] });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.delete('/api/pickup-requests/:id', authMiddleware, async (req, res) => {
+  try {
+    await pool.query(
+      `UPDATE pickup_requests SET status='cancelled'
+       WHERE id=$1 AND requester_id=$2`,
+      [req.params.id, req.user.id]
+    );
+    return res.json({ success: true, message: 'Request imefutwa' });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// COORDINATOR ROUTES  (for CoordinatorDashboardScreen)
+// -----------------------------------------------------------------------------
+
+app.get('/api/coordinator/overview', authMiddleware, async (req, res) => {
+  if (req.user.role !== 'coordinator') {
+    return res.status(403).json({ success: false, message: 'Coordinator only' });
+  }
+  try {
+    const counts = await pool.query(
+      `SELECT status, COUNT(*) AS count FROM pickup_requests GROUP BY status`
+    );
+    const onlineCollectors = await pool.query(
+      `SELECT COUNT(*) AS count FROM users WHERE role='collector' AND status='online'`
     );
     return res.json({
       success: true,
-      eco_points: u.rows[0]?.eco_points || 0,
-      total_kg: u.rows[0]?.total_kg || 0,
-      by_type: logs.rows,
+      pickup_requests_by_status: counts.rows,
+      online_collectors: Number(onlineCollectors.rows[0]?.count || 0),
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 });
 
-app.get('/api/stats/leaderboard', async (req, res) => {
-  try {
-    const r = await pool.query(
-      `SELECT full_name, username, eco_points, total_kg
-       FROM users ORDER BY eco_points DESC LIMIT 20`
-    );
-    return res.json({ success: true, leaderboard: r.rows });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
 // -----------------------------------------------------------------------------
-// BOOKING ROUTES
+// NOTIFICATION ROUTES
+// (no notifications table in the current schema — kept as direct send-only
+//  endpoints; add a notifications table later if you need persisted history)
 // -----------------------------------------------------------------------------
-
-app.get('/api/bookings/centers', async (req, res) => {
-  try {
-    const r = await pool.query(
-      'SELECT * FROM booking_centers WHERE is_active=true ORDER BY name'
-    ).catch(() => ({ rows: [] }));
-    return res.json({ success: true, centers: r.rows });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-app.get('/api/bookings/mine', authMiddleware, async (req, res) => {
-  try {
-    const r = await pool.query(
-      'SELECT * FROM bookings WHERE user_id=$1 ORDER BY created_at DESC',
-      [req.user.id]
-    ).catch(() => ({ rows: [] }));
-    return res.json({ success: true, bookings: r.rows });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-app.get('/api/bookings/:id', authMiddleware, async (req, res) => {
-  try {
-    const r = await pool.query(
-      'SELECT * FROM bookings WHERE id=$1 AND user_id=$2',
-      [req.params.id, req.user.id]
-    ).catch(() => ({ rows: [] }));
-    if (!r.rows[0]) return res.status(404).json({ success: false, message: 'Booking not found' });
-    return res.json({ success: true, booking: r.rows[0] });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-app.post('/api/bookings', authMiddleware, async (req, res) => {
-  const { center_id, waste_type, scheduled_date, notes } = req.body;
-  if (!center_id || !waste_type || !scheduled_date) {
-    return res.status(400).json({ success: false, message: 'center_id, waste_type, scheduled_date zinahitajika' });
-  }
-  try {
-    const r = await pool.query(
-      `INSERT INTO bookings (user_id, center_id, waste_type, scheduled_date, notes, status)
-       VALUES ($1,$2,$3,$4,$5,'pending') RETURNING *`,
-      [req.user.id, center_id, waste_type, scheduled_date, notes || null]
-    );
-    return res.status(201).json({ success: true, booking: r.rows[0] });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-app.delete('/api/bookings/:id', authMiddleware, async (req, res) => {
-  try {
-    await pool.query(
-      'DELETE FROM bookings WHERE id=$1 AND user_id=$2',
-      [req.params.id, req.user.id]
-    );
-    return res.json({ success: true, message: 'Booking imefutwa' });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-app.put('/api/bookings/:id/complete', authMiddleware, async (req, res) => {
-  try {
-    const r = await pool.query(
-      `UPDATE bookings SET status='completed', completed_at=NOW()
-       WHERE id=$1 AND user_id=$2 RETURNING *`,
-      [req.params.id, req.user.id]
-    );
-    if (!r.rows[0]) return res.status(404).json({ success: false, message: 'Booking not found' });
-    return res.json({ success: true, booking: r.rows[0] });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
-});
-
-// -----------------------------------------------------------------------------
-// NOTIFICATION ROUTES (stored in DB)
-// -----------------------------------------------------------------------------
-app.get('/api/notifications', authMiddleware, async (req, res) => {
-  try {
-    const r = await pool.query(
-      'SELECT * FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50',
-      [req.user.id]
-    ).catch(() => ({ rows: [] }));
-    return res.json({ success: true, notifications: r.rows });
-  } catch {
-    return res.json({ success: true, notifications: [] });
-  }
-});
 
 app.post('/api/notifications/sms', async (req, res) => {
   const { to, message } = req.body;
@@ -808,9 +785,9 @@ app.post('/api/test-sms', async (req, res) => {
     }
     let finalMessage = message;
     if (otp) {
-      finalMessage = `Dear ${name || 'Customer'}, your EcoWaste verification code is: ${otp}. Valid for 10 minutes. Do not share this code.`;
+      finalMessage = `Dear ${name || 'Customer'}, your AcoWaste verification code is: ${otp}. Valid for 10 minutes. Do not share this code.`;
     }
-    const result = await sendSMS(phone, finalMessage || 'Test message from EcoWaste API');
+    const result = await sendSMS(phone, finalMessage || 'Test message from AcoWaste API');
     console.log('SMS result:', result);
     return res.json({ success: result.success, result: result.data, error: result.error, sentTo: phone });
   } catch (error) {
@@ -830,10 +807,10 @@ app.post('/api/test-email', async (req, res) => {
     if (!email) {
       return res.status(400).json({ success: false, error: 'Email address is required' });
     }
-    const finalSubject = subject || 'EcoWaste Test Email';
+    const finalSubject = subject || 'AcoWaste Test Email';
     const finalMessage = name
-      ? `Hello ${name},\n\n${message || 'This is a test email from EcoWaste API.'}`
-      : (message || 'This is a test email from EcoWaste API.');
+      ? `Hello ${name},\n\n${message || 'This is a test email from AcoWaste API.'}`
+      : (message || 'This is a test email from AcoWaste API.');
     const result = await sendEmail(email, finalSubject, finalMessage);
     console.log('Email result:', result);
     return res.json({ success: result.success, messageId: result.messageId, error: result.error, sentTo: email });
@@ -856,7 +833,7 @@ app.get('/api/test-sms-config', (_req, res) => {
       smtp_host: process.env.SMTP_HOST || 'smtp.hostinger.com (default)',
       smtp_user: smtpUser || 'NOT SET',
       smtp_from: process.env.SMTP_FROM || 'NOT SET',
-      smtp_from_name: process.env.SMTP_FROM_NAME || 'EcoWaste Support (default)',
+      smtp_from_name: process.env.SMTP_FROM_NAME || 'AcoWaste Support (default)',
       node_env: process.env.NODE_ENV || 'development',
     },
     warning: !mamboToken ? 'MAMBO_TOKEN is NOT set in environment variables!' : 'MAMBO_TOKEN is set',
@@ -951,7 +928,7 @@ server = app.listen(PORT, '0.0.0.0', () => {
   const ip = getLocalIP();
   const line = '-'.repeat(54);
   console.log(`\n${line}`);
-  console.log(`  EcoWaste API v2.0.0`);
+  console.log(`  AcoWaste API v2.1.0`);
   console.log(`  ENV : ${process.env.NODE_ENV || 'development'}`);
   console.log(`  PORT: ${PORT}`);
   console.log(line);
@@ -961,32 +938,27 @@ server = app.listen(PORT, '0.0.0.0', () => {
   console.log('  AUTH');
   console.log(`    POST   /api/auth/register`);
   console.log(`    POST   /api/auth/login`);
-  console.log(`    GET    /api/auth/profile         [protected]`);
+  console.log(`    GET    /api/auth/profile           [protected]`);
   console.log(`    POST   /api/auth/send-otp`);
   console.log(`    POST   /api/auth/verify-otp`);
-  console.log('  WASTE');
-  console.log(`    POST   /api/waste/log             [protected]`);
-  console.log(`    GET    /api/waste/my-logs         [protected]`);
-  console.log(`    DELETE /api/waste/log/:id         [protected]`);
-  console.log(`    POST   /api/waste/verify-ai       [protected]`);
-  console.log('  MAP');
-  console.log(`    GET    /api/map/collection-points`);
-  console.log('  VEHICLES / COLLECTORS');
-  console.log(`    GET    /api/vehicles/nearby`);
+  console.log('  SCANS');
+  console.log(`    POST   /api/scans                  [protected]`);
+  console.log(`    GET    /api/scans/mine             [protected]`);
+  console.log(`    DELETE /api/scans/:id              [protected]`);
+  console.log(`    POST   /api/scans/verify-ai        [protected]`);
+  console.log('  COLLECTORS');
   console.log(`    GET    /api/collectors/nearby`);
-  console.log(`    PUT    /api/collectors/location   [protected]`);
-  console.log('  STATS');
-  console.log(`    GET    /api/stats/me              [protected]`);
-  console.log(`    GET    /api/stats/leaderboard`);
-  console.log('  BOOKINGS');
-  console.log(`    GET    /api/bookings/centers`);
-  console.log(`    GET    /api/bookings/mine         [protected]`);
-  console.log(`    GET    /api/bookings/:id          [protected]`);
-  console.log(`    POST   /api/bookings              [protected]`);
-  console.log(`    DELETE /api/bookings/:id          [protected]`);
-  console.log(`    PUT    /api/bookings/:id/complete [protected]`);
+  console.log(`    PUT    /api/collectors/location    [protected]`);
+  console.log('  PICKUP REQUESTS');
+  console.log(`    POST   /api/pickup-requests              [protected]`);
+  console.log(`    GET    /api/pickup-requests/mine         [protected]`);
+  console.log(`    GET    /api/pickup-requests/pending       [protected]`);
+  console.log(`    PUT    /api/pickup-requests/:id/accept    [protected]`);
+  console.log(`    PUT    /api/pickup-requests/:id/complete  [protected]`);
+  console.log(`    DELETE /api/pickup-requests/:id           [protected]`);
+  console.log('  COORDINATOR');
+  console.log(`    GET    /api/coordinator/overview   [protected, coordinator]`);
   console.log('  NOTIFICATIONS');
-  console.log(`    GET    /api/notifications         [protected]`);
   console.log(`    POST   /api/notifications/sms`);
   console.log(`    POST   /api/notifications/email`);
   console.log(`    POST   /api/notifications/welcome`);

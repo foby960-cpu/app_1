@@ -435,7 +435,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7)
        RETURNING id, name, email, role, phone, vehicle_reg, status, created_at`,
       [name, email, hash, role, phone || null, vehicle_reg || null,
-       role === 'collector' ? 'offline' : null]
+        role === 'collector' ? 'offline' : null]
     );
 
     const user = result.rows[0];
@@ -445,7 +445,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    sendNotification({ phone, email, name, type: 'welcome' }).catch(() => {});
+    sendNotification({ phone, email, name, type: 'welcome' }).catch(() => { });
 
     return res.status(201).json({
       success: true,
@@ -533,8 +533,8 @@ app.post('/api/scans', authMiddleware, async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING *`,
       [req.user.id, label || null, description || null, material_input || null,
-       weight_min_kg || null, weight_max_kg || null, weight_category || null,
-       fee_min_tzs || null, fee_max_tzs || null, latitude || null, longitude || null]
+      weight_min_kg || null, weight_max_kg || null, weight_category || null,
+      fee_min_tzs || null, fee_max_tzs || null, latitude || null, longitude || null]
     );
     return res.status(201).json({ success: true, message: 'Scan imehifadhiwa', scan: r.rows[0] });
   } catch (err) {
@@ -581,14 +581,42 @@ app.post('/api/scans/verify-ai', authMiddleware, aiLimiter, async (req, res) => 
 // Uses users.status / users.latitude / users.longitude (no is_online column)
 // -----------------------------------------------------------------------------
 
+// Accepts optional ?lat=..&lng=.. to compute distance_km (Haversine, via
+// Postgres) and sort nearest-first. Without them, returns online collectors
+// unsorted with distance_km = null.
 app.get('/api/collectors/nearby', async (req, res) => {
+  const lat = req.query.lat !== undefined ? parseFloat(req.query.lat) : null;
+  const lng = req.query.lng !== undefined ? parseFloat(req.query.lng) : null;
+  const hasOrigin = lat !== null && lng !== null && !Number.isNaN(lat) && !Number.isNaN(lng);
+
   try {
-    const r = await pool.query(
-      `SELECT id, name, phone, vehicle_reg, status, latitude, longitude, location_detail
-       FROM users
-       WHERE role='collector' AND status='online'
-       LIMIT 20`
-    );
+    let r;
+    if (hasOrigin) {
+      r = await pool.query(
+        `SELECT id, name, phone, vehicle_reg, status, latitude, longitude, location_detail,
+                (6371 * acos(
+                   GREATEST(-1, LEAST(1,
+                     cos(radians($1)) * cos(radians(latitude)) *
+                     cos(radians(longitude) - radians($2)) +
+                     sin(radians($1)) * sin(radians(latitude))
+                   ))
+                 ))::numeric(10,2) AS distance_km
+         FROM users
+         WHERE role='collector' AND status='online'
+               AND latitude IS NOT NULL AND longitude IS NOT NULL
+         ORDER BY distance_km ASC
+         LIMIT 20`,
+        [lat, lng]
+      );
+    } else {
+      r = await pool.query(
+        `SELECT id, name, phone, vehicle_reg, status, latitude, longitude, location_detail,
+                NULL::numeric AS distance_km
+         FROM users
+         WHERE role='collector' AND status='online'
+         LIMIT 20`
+      );
+    }
     return res.json({ success: true, collectors: r.rows });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
@@ -609,8 +637,8 @@ app.put('/api/collectors/location', authMiddleware, async (req, res) => {
          last_seen = now()
        WHERE id = $5`,
       [latitude ?? null, longitude ?? null,
-       allowedStatus.includes(status) ? status : 'online',
-       location_detail || null, req.user.id]
+      allowedStatus.includes(status) ? status : 'online',
+      location_detail || null, req.user.id]
     );
     return res.json({ success: true, message: 'Location updated' });
   } catch (err) {

@@ -624,23 +624,27 @@ app.get('/api/collectors/nearby', async (req, res) => {
 });
 
 app.put('/api/collectors/location', authMiddleware, async (req, res) => {
-  const { latitude, longitude, status, location_detail } = req.body;
+  const { latitude, longitude, status, location_detail, vehicle_reg } = req.body;
   const allowedStatus = ['online', 'idle', 'offline'];
 
   try {
-    await pool.query(
+    const r = await pool.query(
       `UPDATE users SET
          latitude = $1,
          longitude = $2,
          status = $3,
          location_detail = COALESCE($4, location_detail),
+         vehicle_reg = COALESCE($5, vehicle_reg),
          last_seen = now()
-       WHERE id = $5`,
+       WHERE id = $6
+       RETURNING id, name, email, role, phone, vehicle_reg, status,
+                 latitude, longitude, location_detail, last_seen`,
       [latitude ?? null, longitude ?? null,
       allowedStatus.includes(status) ? status : 'online',
-      location_detail || null, req.user.id]
+      location_detail || null, vehicle_reg || null, req.user.id]
     );
-    return res.json({ success: true, message: 'Location updated' });
+    if (!r.rows[0]) return res.status(404).json({ success: false, message: 'User not found' });
+    return res.json({ success: true, message: 'Location updated', user: r.rows[0] });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -652,17 +656,33 @@ app.put('/api/collectors/location', authMiddleware, async (req, res) => {
 //                        created_at, updated_at
 // -----------------------------------------------------------------------------
 
-// Create a pickup request from a scan (requester = logged-in user)
+// Create a pickup request. requester = logged-in user. collector_id is
+// optional: if provided, this is a direct "order this collector" request
+// (tapped from the map/radar); if omitted, it's an open request any
+// collector can later claim via /accept. scan_id is also optional — a
+// user can order a collector with no prior waste scan.
 app.post('/api/pickup-requests', authMiddleware, async (req, res) => {
-  const { scan_id } = req.body;
-  if (!scan_id) {
-    return res.status(400).json({ success: false, message: 'scan_id inahitajika' });
+  const { scan_id, collector_id } = req.body;
+
+  if (!scan_id && !collector_id) {
+    return res.status(400).json({ success: false, message: 'scan_id au collector_id inahitajika' });
   }
+
   try {
+    if (collector_id) {
+      const c = await pool.query(
+        `SELECT id FROM users WHERE id=$1 AND role='collector'`,
+        [collector_id]
+      );
+      if (c.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Collector hajapatikana' });
+      }
+    }
+
     const r = await pool.query(
-      `INSERT INTO pickup_requests (requester_id, scan_id, status)
-       VALUES ($1,$2,'pending') RETURNING *`,
-      [req.user.id, scan_id]
+      `INSERT INTO pickup_requests (requester_id, collector_id, scan_id, status)
+       VALUES ($1,$2,$3,'pending') RETURNING *`,
+      [req.user.id, collector_id || null, scan_id || null]
     );
     return res.status(201).json({ success: true, request: r.rows[0] });
   } catch (err) {
@@ -683,6 +703,26 @@ app.get('/api/pickup-requests/mine', authMiddleware, async (req, res) => {
   }
 });
 
+// Direct orders sent to the logged-in collector (collector_id was set at
+// creation time, i.e. tapped from the map) — distinct from the open
+// /pending pool which has no collector assigned yet. This is what
+// CollectorHomeScreen's "incoming requests" list should poll.
+app.get('/api/pickup-requests/incoming', authMiddleware, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT pr.*, u.name AS requester_name, u.phone AS requester_phone
+       FROM pickup_requests pr
+       JOIN users u ON u.id = pr.requester_id
+       WHERE pr.collector_id = $1 AND pr.status = 'pending'
+       ORDER BY pr.created_at ASC`,
+      [req.user.id]
+    );
+    return res.json({ success: true, requests: r.rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // All pending requests, for coordinators/collectors to act on
 app.get('/api/pickup-requests/pending', authMiddleware, async (req, res) => {
   try {
@@ -690,9 +730,9 @@ app.get('/api/pickup-requests/pending', authMiddleware, async (req, res) => {
       `SELECT pr.*, s.label, s.weight_min_kg, s.weight_max_kg, s.fee_min_tzs, s.fee_max_tzs,
               u.name AS requester_name, u.phone AS requester_phone
        FROM pickup_requests pr
-       JOIN scans s ON s.id = pr.scan_id
+       LEFT JOIN scans s ON s.id = pr.scan_id
        JOIN users u ON u.id = pr.requester_id
-       WHERE pr.status = 'pending'
+       WHERE pr.status = 'pending' AND pr.collector_id IS NULL
        ORDER BY pr.created_at ASC`
     );
     return res.json({ success: true, requests: r.rows });
@@ -701,17 +741,20 @@ app.get('/api/pickup-requests/pending', authMiddleware, async (req, res) => {
   }
 });
 
-// Collector accepts a pending request
+// Collector accepts a request — works for both the open pool (collector_id
+// was null, gets claimed here) and a direct order (collector_id was already
+// set to this collector when the user tapped them on the map).
 app.put('/api/pickup-requests/:id/accept', authMiddleware, async (req, res) => {
   try {
     const r = await pool.query(
       `UPDATE pickup_requests
        SET collector_id=$1, status='accepted'
        WHERE id=$2 AND status='pending'
+             AND (collector_id IS NULL OR collector_id=$1)
        RETURNING *`,
       [req.user.id, req.params.id]
     );
-    if (!r.rows[0]) return res.status(409).json({ success: false, message: 'Request haipo au tayari imeshughulikiwa' });
+    if (!r.rows[0]) return res.status(409).json({ success: false, message: 'Request haipo, tayari imeshughulikiwa, au imeagizwa kwa collector mwingine' });
     return res.json({ success: true, request: r.rows[0] });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
@@ -748,6 +791,29 @@ app.delete('/api/pickup-requests/:id', authMiddleware, async (req, res) => {
 // -----------------------------------------------------------------------------
 // COORDINATOR ROUTES  (for CoordinatorDashboardScreen)
 // -----------------------------------------------------------------------------
+
+// "Leaderboard" ranked by scan count — there is no points/eco_points column
+// in this schema, so ranking is based on activity (number of scans logged).
+app.get('/api/coordinator/leaderboard', authMiddleware, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT u.id, u.name, COUNT(s.id) AS scan_count
+       FROM users u
+       LEFT JOIN scans s ON s.user_id = u.id
+       WHERE u.role = 'user'
+       GROUP BY u.id, u.name
+       ORDER BY scan_count DESC, u.name ASC
+       LIMIT 20`
+    );
+    const leaderboard = r.rows.map(row => ({
+      ...row,
+      scan_count: Number(row.scan_count),
+    }));
+    return res.json({ success: true, leaderboard });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 app.get('/api/coordinator/overview', authMiddleware, async (req, res) => {
   if (req.user.role !== 'coordinator') {
@@ -978,13 +1044,15 @@ server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`    GET    /api/collectors/nearby`);
   console.log(`    PUT    /api/collectors/location    [protected]`);
   console.log('  PICKUP REQUESTS');
-  console.log(`    POST   /api/pickup-requests              [protected]`);
-  console.log(`    GET    /api/pickup-requests/mine         [protected]`);
-  console.log(`    GET    /api/pickup-requests/pending       [protected]`);
-  console.log(`    PUT    /api/pickup-requests/:id/accept    [protected]`);
-  console.log(`    PUT    /api/pickup-requests/:id/complete  [protected]`);
-  console.log(`    DELETE /api/pickup-requests/:id           [protected]`);
+  console.log(`    POST   /api/pickup-requests               [protected]`);
+  console.log(`    GET    /api/pickup-requests/mine          [protected]`);
+  console.log(`    GET    /api/pickup-requests/incoming      [protected]`);
+  console.log(`    GET    /api/pickup-requests/pending        [protected]`);
+  console.log(`    PUT    /api/pickup-requests/:id/accept     [protected]`);
+  console.log(`    PUT    /api/pickup-requests/:id/complete   [protected]`);
+  console.log(`    DELETE /api/pickup-requests/:id            [protected]`);
   console.log('  COORDINATOR');
+  console.log(`    GET    /api/coordinator/leaderboard [protected]`);
   console.log(`    GET    /api/coordinator/overview   [protected, coordinator]`);
   console.log('  NOTIFICATIONS');
   console.log(`    POST   /api/notifications/sms`);
